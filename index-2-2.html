@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quick Draw</title>
+<meta name="description" content="A webcam duel. Holster your fist, wait for the call, and make a finger gun faster than your opponent. Two players on one laptop, or you against the Sheriff.">
+<meta property="og:title" content="Quick Draw: the fastest hand in the office">
+<meta property="og:description" content="Two players, one webcam, one shot. Runs in your browser. Nothing is recorded or uploaded.">
+<meta name="theme-color" content="#FF6A2A">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23FF5A1F'/><text x='50' y='70' font-size='58' text-anchor='middle'>👉</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ================================================================
+     Design tokens
+     Environment = sunset. Information always sits on ink plaques,
+     so scores, states and times stay legible at a glance.
+     ================================================================ */
+  :root {
+    /* Sky */
+    --sky-1: #FF9A4A;
+    --sky-2: #FF6A2A;
+    --sky-3: #E8501C;
+    --sun-core: #FFD27A;
+    --sun-edge: #FFA03A;
+    /* Ink and paper */
+    --ink: #160B06;
+    --ink-2: #24130A;
+    --ink-3: #3A2214;
+    --bone: #F6E7CB;
+    --bone-dim: #CDB896;
+    /* State colours: one meaning each, everywhere */
+    --gold: #F2B705;   /* armed, holstered, the call */
+    --jade: #43D19E;   /* winner, fastest */
+    --coral: #FF7A66;  /* foul, too slow */
+    --rust-text: #8E2408;
+
+    /* Type */
+    --display: "Rye", Georgia, serif;
+    --body: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+    --t-12: 14px; --t-14: 16px; --t-16: 18px; --t-18: 20px; --t-22: 24px; --t-28: 30px; --t-40: 44px;
+
+    /* Space (4px base) */
+    --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px;
+
+    /* Shape */
+    --r-s: 10px; --r-m: 16px; --r-l: 24px; --r-pill: 999px;
+    --lift: 0 6px 0 rgba(22, 11, 6, .35);
+    --ease-snap: cubic-bezier(.2, 1.5, .35, 1);
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 48%, var(--sky-3) 100%);
+    background-attachment: fixed;
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: var(--t-18);
+    line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; border-radius: 8px; }
+  .on-ink :focus-visible, .sheet .mode:focus-visible { outline-color: var(--gold); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ================================================================
+     Scene: sun, horizon, and the cinematic layers
+     ================================================================ */
+  .sun {
+    position: fixed; left: 50%; top: 56%; width: 80vmin; height: 80vmin; transform: translate(-50%, -50%);
+    border-radius: 50%; z-index: 0; pointer-events: none;
+    background: radial-gradient(circle, var(--sun-core) 0%, var(--sun-edge) 52%, rgba(255, 160, 58, 0) 71%);
+    transition: transform 2.4s var(--ease-out), opacity 1.2s;
+  }
+  .horizon { position: fixed; left: 0; right: 0; bottom: 0; height: 8vh; background: var(--ink); z-index: 0; pointer-events: none; }
+  .horizon svg { position: absolute; bottom: 100%; left: 0; width: 100%; height: 8vh; }
+
+  /* Vignette and letterbox close in during the standoff */
+  .vignette {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at 50% 50%, rgba(22, 11, 6, 0) 35%, rgba(22, 11, 6, .62) 100%);
+    transition: opacity 1.4s var(--ease-out);
+  }
+  .bar { position: fixed; left: 0; right: 0; height: 0; background: var(--ink); z-index: 0; pointer-events: none; transition: height 1.4s var(--ease-out); }
+  .bar.top { top: 0; }
+  .bar.bottom { bottom: 0; }
+  body[data-phase="standoff"] .vignette { opacity: 1; }
+  body[data-phase="standoff"] .bar { height: 6vh; }
+  body[data-phase="standoff"] .sun { transform: translate(-50%, -46%) scale(.94); }
+  body[data-phase="draw"] .bar, body[data-phase="result"] .bar { transition: height .12s ease-out; }
+
+  /* The flash on Draw! */
+  body.flash::after { content: ""; position: fixed; inset: 0; background: var(--bone); z-index: 50; animation: flash .32s ease-out forwards; pointer-events: none; }
+  @keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+
+  /* ================================================================
+     App shell
+     ================================================================ */
+  .app {
+    position: relative; max-width: 1240px; margin: 0 auto;
+    padding: var(--s-4) var(--s-5) var(--s-6);
+    min-height: 100vh; min-height: 100svh;
+    display: flex; flex-direction: column; gap: var(--s-4);
+  }
+
+  header { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s-4); }
+  .title { font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1; margin: 0; letter-spacing: .01em; }
+  .header-actions { display: flex; gap: var(--s-2); justify-content: flex-end; }
+  .ghost {
+    display: inline-flex; align-items: center; gap: var(--s-2);
+    background: transparent; border: 2px solid var(--ink); border-radius: var(--r-pill);
+    padding: 7px 14px; font-weight: 700; font-size: var(--t-16); white-space: nowrap; min-height: 40px;
+    transition: background .15s, color .15s;
+  }
+  .ghost svg { width: 18px; height: 18px; flex: none; }
+  .ghost:hover { background: var(--ink); color: var(--bone); }
+  #soundBtn[aria-pressed="false"] .wave { display: none; }
+  #soundBtn[aria-pressed="true"] .mute { display: none; }
+
+  /* Scoreboard plank */
+  .tally {
+    display: grid; grid-template-columns: auto auto auto auto auto; align-items: center; gap: var(--s-3);
+    background: var(--ink); color: var(--bone); border-radius: var(--r-m); padding: 8px 16px;
+    box-shadow: var(--lift);
+  }
+  .tally .name { font-weight: 700; font-size: var(--t-16); max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tally .name:first-child { text-align: right; }
+  .tally .side { display: flex; align-items: center; gap: var(--s-2); }
+  .tally .side.right { flex-direction: row-reverse; }
+  .pts { font-family: var(--body); font-weight: 800; font-size: 34px; line-height: 1; min-width: 1ch; text-align: center; color: var(--gold); font-variant-numeric: tabular-nums; display: inline-block; }
+  .pips { display: flex; gap: 5px; }
+  .side.right .pips { flex-direction: row-reverse; }
+  .pip { width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(246, 231, 203, .45); transition: background .2s, border-color .2s, transform .3s var(--ease-snap); }
+  .pip.on { background: var(--gold); border-color: var(--gold); transform: scale(1.15); }
+  .tally .sep { font-weight: 700; font-size: var(--t-14); color: var(--bone-dim); }
+  .title, .header-actions { transition: opacity .6s; }
+  body[data-phase="standoff"] .title, body[data-phase="standoff"] .header-actions { opacity: 0; pointer-events: none; }
+  .bump { animation: bump .5s var(--ease-snap); }
+  @keyframes bump { 40% { transform: scale(1.6); } }
+
+  /* ================================================================
+     The duel: player plaques either side of the camera
+     ================================================================ */
+  .duel {
+    position: relative; z-index: 1; flex: 1;
+    display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 700px) minmax(150px, 1fr);
+    align-items: center; gap: var(--s-5);
+  }
+  .gunslinger {
+    background: var(--ink); color: var(--bone); border-radius: var(--r-l);
+    padding: var(--s-5) var(--s-4); display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+    text-align: center; box-shadow: var(--lift); border: 2px solid transparent;
+    transition: border-color .2s, transform .3s var(--ease-snap);
+  }
+  .gunslinger[data-state="win"] { border-color: var(--jade); transform: translateY(-4px); }
+  .gunslinger[data-state="bad"] { border-color: var(--coral); }
+  .gunslinger .who { font-family: var(--display); font-size: var(--t-28); line-height: 1.05; }
+  .gunslinger[data-side="p1"] .who::before, .gunslinger[data-side="p2"] .who::before { content: ""; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: var(--s-2);
+    font-weight: 700; font-size: var(--t-16); padding: 6px 14px; border-radius: var(--r-pill);
+    background: rgba(246, 231, 203, .12); color: var(--bone);
+    transition: background .15s, color .15s;
+    min-height: 34px;
+  }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bone-dim); flex: none; }
+  .status.ok { background: var(--gold); color: var(--ink); }
+  .status.ok::before { background: var(--ink); }
+  .status.win { background: var(--jade); color: var(--ink); }
+  .status.win::before { background: var(--ink); }
+  .status.bad { background: var(--coral); color: var(--ink); }
+  .status.bad::before { background: var(--ink); }
+
+  .time {
+    font-family: var(--body); font-weight: 800; font-size: 52px; line-height: 1; min-height: 52px;
+    font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--bone);
+  }
+  .time small { font-size: var(--t-18); font-weight: 700; color: var(--bone-dim); margin-left: 2px; }
+  .gunslinger[data-state="win"] .time { color: var(--jade); animation: rise .45s var(--ease-snap); }
+  @keyframes rise { from { transform: translateY(10px) scale(.8); opacity: 0; } }
+  .keyhint { font-weight: 600; font-size: var(--t-14); color: var(--bone-dim); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; }
+
+  .kbd {
+    display: inline-grid; place-items: center; min-width: 1.7em; height: 1.7em; padding: 0 .4em;
+    border-radius: 6px; background: var(--bone); color: var(--ink); font-weight: 800; font-size: .85em;
+    box-shadow: 0 3px 0 rgba(22, 11, 6, .5); line-height: 1;
+  }
+  .gunslinger .kbd { box-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
+
+  /* ================================================================
+     Camera frame
+     ================================================================ */
+  .frame {
+    position: relative; aspect-ratio: 4 / 3; justify-self: center;
+    width: min(100%, calc((100vh - 360px) * 4 / 3)); min-width: min(100%, 360px);
+    border-radius: var(--r-l); overflow: hidden; background: var(--ink-2);
+    border: 4px solid var(--ink); box-shadow: 0 16px 0 rgba(22, 11, 6, .28);
+    transition: border-color .15s;
+    isolation: isolate; container-type: inline-size;
+  }
+  .frame video, .frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .frame video { filter: sepia(.3) saturate(.85) contrast(1.06) brightness(.95); }
+  body[data-phase="standoff"] .frame video { filter: sepia(.5) saturate(.6) contrast(1.15) brightness(.8); transition: filter 1.4s; }
+  .frame canvas { z-index: 2; }
+
+  /* Player zones: tint each half by that player's state */
+  .zones { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; z-index: 1; pointer-events: none; }
+  .frame.solo .zones { grid-template-columns: 1fr; }
+  .frame.solo .z2 { display: none; }
+  .zone { position: relative; transition: background .2s, box-shadow .2s; }
+  .frame[data-s1="win"] .z1, .frame[data-s2="win"] .z2 { background: rgba(67, 209, 158, .16); box-shadow: inset 0 0 0 4px var(--jade); }
+  .frame[data-s1="bad"] .z1, .frame[data-s2="bad"] .z2 { background: rgba(22, 11, 6, .5); }
+  .zone .tag {
+    position: absolute; top: var(--s-3); padding: 4px 10px; border-radius: var(--r-pill);
+    background: rgba(22, 11, 6, .78); color: var(--bone); font-weight: 700; font-size: var(--t-14); z-index: 4;
+  }
+  .z1 .tag { left: var(--s-3); }
+  .z2 .tag { right: var(--s-3); }
+  .frame.solo .tag { display: none; }
+
+  .split { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; border-left: 3px dashed rgba(246, 231, 203, .5); z-index: 3; transform: translateX(-1.5px); }
+  .frame.solo .split { display: none; }
+
+  /* Viewfinder corners */
+  .corners { position: absolute; inset: var(--s-3); z-index: 3; pointer-events: none; }
+  .corners i { position: absolute; width: 22px; height: 22px; border: 3px solid rgba(246, 231, 203, .7); }
+  .corners i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+  .corners i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 8px; }
+  .corners i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 8px; }
+  .corners i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
+  body[data-phase="standoff"] .corners i { border-color: var(--gold); }
+
+  /* Before the camera starts */
+  .placeholder { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--bone); padding: var(--s-5); z-index: 1; }
+  .placeholder .glyphs { display: flex; gap: var(--s-5); justify-content: center; align-items: center; font-size: 60px; line-height: 1; }
+  .placeholder .glyphs span.arrow { font-size: var(--t-28); color: var(--bone-dim); }
+  .placeholder p { margin: var(--s-3) 0 0; font-size: var(--t-18); color: var(--bone-dim); }
+
+  /* Keyboard mode stand ins */
+  .keyhands { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; align-items: end; padding-bottom: 7%; z-index: 1; }
+  .frame.solo .keyhands { grid-template-columns: 1fr; }
+  .keyhands div { text-align: center; font-size: clamp(56px, 9vw, 100px); line-height: 1; transition: transform .14s var(--ease-snap); }
+  .keyhands div.fired { transform: translateY(-14px) rotate(-8deg) scale(1.08); }
+  .keyhands .p2 { transform: scaleX(-1); }
+  .keyhands .p2.fired { transform: scaleX(-1) translateY(-14px) rotate(-8deg) scale(1.08); }
+  .frame.solo .keyhands .p2 { display: none; }
+
+  /* Holster progress, camera mode */
+  .hold { position: absolute; left: 50%; bottom: 14%; width: 38%; height: 8px; transform: translateX(-50%); border-radius: var(--r-pill); background: rgba(246, 231, 203, .25); overflow: hidden; z-index: 4; opacity: 0; transition: opacity .2s; }
+  .hold span { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--hold, 0)); background: var(--gold); border-radius: inherit; }
+  body[data-phase="holster"][data-input="camera"] .hold { opacity: 1; }
+
+  /* The call */
+  .call-wrap { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; pointer-events: none; text-align: center; padding: var(--s-4); }
+  .call {
+    font-family: var(--display); color: var(--bone); margin: 0; line-height: .92;
+    font-size: clamp(40px, 7vw, 84px);
+    font-size: clamp(34px, 11cqi, 84px);
+    text-shadow: 0 4px 0 var(--ink), 0 0 28px rgba(22, 11, 6, .7);
+  }
+  .call.pulse { animation: breathe 1.3s ease-in-out infinite; }
+  .call.slam { animation: slam .32s var(--ease-snap); }
+  .call.draw {
+    color: var(--gold); font-size: clamp(84px, 16vw, 200px); font-size: clamp(64px, 25cqi, 200px);
+    text-shadow: 0 6px 0 var(--ink), 0 0 50px rgba(242, 183, 5, .55);
+    animation: slam .24s var(--ease-snap);
+  }
+  body[data-phase="standoff"] .call { letter-spacing: .08em; font-size: clamp(32px, 10cqi, 70px); }
+  @keyframes slam { from { transform: scale(2.3) rotate(-6deg); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes breathe { 50% { transform: scale(1.05); opacity: .9; } }
+
+  /* Heartbeat: the frame throbs on each thump */
+  .frame.beat { animation: beat .32s ease-out; }
+  @keyframes beat {
+    0% { box-shadow: 0 16px 0 rgba(22, 11, 6, .28), 0 0 0 0 rgba(242, 183, 5, .55); }
+    100% { box-shadow: 0 16px 0 rgba(22, 11, 6, .28), 0 0 0 22px rgba(242, 183, 5, 0); }
+  }
+  body[data-phase="draw"] .frame { border-color: var(--gold); }
+
+  /* Recoil and muzzle flash on the shot */
+  .frame.recoil { animation: recoil .34s cubic-bezier(.3, .7, .4, 1); }
+  @keyframes recoil {
+    0% { transform: translate(0, 0); } 15% { transform: translate(-7px, 3px) rotate(-.6deg); }
+    35% { transform: translate(5px, -2px) rotate(.4deg); } 60% { transform: translate(-2px, 1px); } 100% { transform: none; }
+  }
+  .muzzle { position: absolute; top: 50%; width: 60%; aspect-ratio: 1; border-radius: 50%; z-index: 3; pointer-events: none; opacity: 0;
+    background: radial-gradient(circle, rgba(255, 236, 170, .95) 0%, rgba(242, 183, 5, .55) 30%, rgba(242, 183, 5, 0) 65%); }
+  .muzzle.m1 { left: 25%; transform: translate(-50%, -50%); }
+  .muzzle.m2 { left: 75%; transform: translate(-50%, -50%); }
+  .frame.solo .muzzle.m1 { left: 50%; }
+  .muzzle.go { animation: muzzle .38s ease-out; }
+  @keyframes muzzle { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.4); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); } }
+
+  /* ================================================================
+     Caption and actions under the frame
+     ================================================================ */
+  .below { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--s-3); padding-bottom: 10vh; }
+  .line {
+    margin: 0; max-width: 62ch; text-align: center;
+    background: rgba(22, 11, 6, .86); color: var(--bone);
+    font-size: var(--t-18); font-weight: 600; padding: 10px 18px; border-radius: var(--r-m);
+  }
+  .line b { color: var(--gold); font-weight: 800; }
+  .line .kbd { margin: 0 2px; }
+  .row { display: flex; gap: var(--s-3); flex-wrap: wrap; justify-content: center; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
+    min-height: 52px; padding: 12px 28px; border-radius: var(--r-pill);
+    background: var(--bone); color: var(--ink); border: 3px solid var(--ink);
+    font-weight: 800; font-size: var(--t-22); letter-spacing: .01em;
+    box-shadow: var(--lift); transition: transform .08s, box-shadow .08s, background .15s;
+  }
+  .btn:hover { background: #FFF3DC; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(22, 11, 6, .35); }
+  .btn.alt { background: transparent; box-shadow: none; }
+  .btn.alt:hover { background: rgba(22, 11, 6, .08); }
+  .btn.alt:active { transform: translateY(2px); }
+
+  /* Touch tap zones for keys mode on phones */
+  .tapzones { position: fixed; inset: 0; z-index: 2; display: none; }
+  .tapzones button { flex: 1; background: transparent; border: 0; }
+  .tapzones button:active { background: rgba(246, 231, 203, .08); }
+  body.touch-keys .tapzones { display: flex; }
+  body.touch-keys.solo-mode .tapzones button:last-child { display: none; }
+
+  /* ================================================================
+     Sheets: start and match over
+     ================================================================ */
+  .sheet-wrap { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--s-4); background: rgba(22, 11, 6, .72); backdrop-filter: blur(3px); }
+  .sheet {
+    position: relative; background: var(--bone); border-radius: var(--r-l); border: 4px solid var(--ink);
+    width: min(680px, 100%); max-height: 100%; overflow: auto;
+    padding: var(--s-6); box-shadow: 0 18px 0 rgba(0, 0, 0, .35);
+    animation: sheetIn .38s var(--ease-out);
+  }
+  @keyframes sheetIn { from { transform: translateY(18px) scale(.98); opacity: 0; } }
+  .sheet h1 { font-family: var(--display); font-weight: 400; font-size: clamp(46px, 8vw, 72px); line-height: .92; margin: 0 0 var(--s-3); }
+  .sheet .lede { font-size: var(--t-22); margin: 0 0 var(--s-5); max-width: 40ch; }
+  .sheet .rule { border: 0; border-top: 2px dashed rgba(22, 11, 6, .25); margin: var(--s-5) 0; }
+
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-3); counter-reset: step; }
+  .steps li {
+    counter-increment: step; position: relative;
+    background: rgba(22, 11, 6, .06); border-radius: var(--r-m); padding: var(--s-4) var(--s-3) var(--s-3);
+    display: flex; flex-direction: column; gap: var(--s-2); font-size: var(--t-16); line-height: 1.25;
+  }
+  .steps li::before { content: counter(step); position: absolute; top: var(--s-3); right: var(--s-3); font-weight: 800; font-size: var(--t-14); color: var(--rust-text); }
+  .steps .g { font-size: 38px; line-height: 1; }
+  .steps strong { font-size: var(--t-18); }
+
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+  .mode {
+    text-align: left; background: var(--ink); color: var(--bone); border: 0; border-radius: var(--r-m);
+    padding: var(--s-4) var(--s-4) var(--s-4) var(--s-4); display: grid; grid-template-columns: auto 1fr; gap: 2px var(--s-3); align-items: start;
+    box-shadow: var(--lift); transition: transform .12s var(--ease-snap), box-shadow .12s;
+  }
+  .mode:hover { transform: translateY(-3px); box-shadow: 0 9px 0 rgba(22, 11, 6, .35); }
+  .mode:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(22, 11, 6, .35); }
+  .mode .ic { grid-row: span 2; width: 44px; height: 44px; border-radius: 12px; background: var(--gold); display: grid; place-items: center; }
+  .mode .ic svg { width: 26px; height: 26px; }
+  .mode strong { font-family: var(--display); font-weight: 400; font-size: var(--t-28); line-height: 1.1; color: var(--gold); }
+  .mode span.d { font-size: var(--t-16); color: var(--bone-dim); line-height: 1.25; }
+  .fine { font-size: var(--t-16); color: var(--ink-3); margin: var(--s-4) 0 0; line-height: 1.4; }
+  .textlink { background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 3px; font-weight: 700; color: var(--ink); }
+  .privacy { display: inline-flex; align-items: center; gap: 6px; }
+  .privacy svg { width: 16px; height: 16px; flex: none; }
+
+  /* Result */
+  .result .eyebrow-star { width: 54px; height: 54px; margin-bottom: var(--s-3); }
+  .result-score { font-family: var(--body); font-weight: 800; font-size: 76px; line-height: 1; margin: 0 0 var(--s-5); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .facts { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: var(--s-3); margin-bottom: var(--s-5); }
+  .facts > div { background: rgba(22, 11, 6, .06); border-radius: var(--r-m); padding: var(--s-3) var(--s-4); font-size: var(--t-16); color: var(--ink-3); }
+  .facts > div:first-child { background: var(--ink); color: var(--bone-dim); }
+  .facts strong { display: block; font-weight: 800; font-size: 36px; line-height: 1.05; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .facts > div:first-child strong { color: var(--jade); }
+  .result .row { justify-content: flex-start; }
+  .sheet .btn { font-size: var(--t-18); min-height: 48px; padding: 10px 22px; }
+  .sheet .btn:not(.alt) { background: var(--ink); color: var(--bone); }
+  .sheet .btn:not(.alt):hover { background: var(--ink-2); }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 8px); z-index: 30; background: var(--ink); color: var(--bone); padding: 12px 18px; border-radius: var(--r-pill); font-weight: 700; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ================================================================
+     Tablet
+     ================================================================ */
+  @media (max-width: 1100px) and (min-width: 861px) {
+    .duel { grid-template-columns: minmax(140px, 1fr) minmax(0, 600px) minmax(140px, 1fr); gap: var(--s-4); }
+    .time { font-size: 44px; min-height: 44px; }
+    .gunslinger .who { font-size: var(--t-22); }
+  }
+
+  /* ================================================================
+     Mobile: frame on top, two plaques side by side underneath
+     ================================================================ */
+  @media (max-width: 860px) {
+    body { font-size: var(--t-16); }
+    .app { padding: var(--s-3) var(--s-3) var(--s-5); gap: var(--s-3); }
+    header { grid-template-columns: 1fr auto; row-gap: var(--s-3); }
+    .title { font-size: 26px; }
+    .ghost { padding: 6px 10px; min-height: 38px; font-size: var(--t-14); }
+    .ghost .lbl { display: none; }
+    .tally { grid-column: 1 / -1; order: 3; justify-self: stretch; justify-content: center; grid-template-columns: 1fr auto auto auto 1fr; padding: 6px 12px; }
+    .pts { font-size: 28px; }
+    .duel { grid-template-columns: 1fr 1fr; gap: var(--s-3); align-items: stretch; flex: none; }
+    .frame { grid-column: 1 / -1; order: -1; width: 100%; min-width: 0; max-height: 60svh; }
+    .gunslinger { padding: var(--s-3); gap: var(--s-2); border-radius: var(--r-m); }
+    .gunslinger .who { font-size: var(--t-22); }
+    .status { font-size: var(--t-14); padding: 4px 10px; min-height: 28px; }
+    .time { font-size: 36px; min-height: 36px; }
+    .keyhint { display: none; }
+    .line { font-size: var(--t-16); }
+    .btn { font-size: var(--t-18); min-height: 48px; padding: 10px 22px; }
+    .below { padding-bottom: 9vh; }
+    .sheet { padding: var(--s-5) var(--s-4); }
+    .sheet .lede { font-size: var(--t-18); }
+    .steps { grid-template-columns: 1fr; }
+    .steps li { flex-direction: row; align-items: center; padding: var(--s-3); }
+    .steps li::before { position: static; order: -1; min-width: 1ch; }
+    .steps .g { font-size: 30px; }
+    .modes { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: 1fr 1fr; }
+    .facts > div:first-child { grid-column: 1 / -1; }
+    .result-score { font-size: 60px; }
+    body[data-phase="standoff"] .bar { height: 4vh; }
+  }
+  @media (max-width: 380px) {
+    .tally .name { display: none; }
+  }
+
+  /* ================================================================
+     Reduced motion: keep every state, drop the movement
+     ================================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    body.flash::after, .muzzle { display: none; }
+    body[data-phase="standoff"] .sun { transform: translate(-50%, -50%); }
+  }
+</style>
+</head>
+<body data-phase="intro">
+<div class="sun" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="horizon" aria-hidden="true">
+  <svg viewBox="0 0 1200 90" preserveAspectRatio="none"><path fill="#160B06" d="M0 90 L0 62 L80 58 L120 30 L135 30 L150 58 L330 60 L360 44 L420 44 L450 60 L700 62 L760 22 L790 22 L850 62 L1040 60 L1070 40 L1076 18 L1082 40 L1100 60 L1200 58 L1200 90 Z"/></svg>
+</div>
+<div class="bar top" aria-hidden="true"></div>
+<div class="bar bottom" aria-hidden="true"></div>
+
+<div class="tapzones" aria-hidden="true">
+  <button data-fire="p1" tabindex="-1"></button>
+  <button data-fire="p2" tabindex="-1"></button>
+</div>
+
+<div class="app">
+  <header>
+    <h1 class="title">Quick Draw</h1>
+    <div class="tally" aria-label="Score">
+      <span class="name" id="p1Name">Left</span>
+      <span class="side left"><span class="pts" id="p1Pts">0</span><span class="pips" id="p1Pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span></span>
+      <span class="sep">to</span>
+      <span class="side right"><span class="pts" id="p2Pts">0</span><span class="pips" id="p2Pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span></span>
+      <span class="name" id="p2Name">Right</span>
+    </div>
+    <div class="header-actions">
+      <button class="ghost" id="soundBtn" aria-pressed="true" aria-label="Sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="mute" d="M17 9l5 6M22 9l-5 6"/></svg>
+        <span class="lbl">Sound <span id="soundState">on</span></span>
+      </button>
+      <button class="ghost" id="rulesBtn" aria-label="Rules">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.9"/><circle cx="12" cy="17.3" r=".6" fill="currentColor"/></svg>
+        <span class="lbl">Rules</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="duel">
+    <section class="gunslinger on-ink" id="p1Card" data-side="p1" aria-label="Left player">
+      <div class="who" id="p1Who">Left</div>
+      <div class="status" id="p1Status">Waiting</div>
+      <div class="time" id="p1Time"></div>
+      <div class="keyhint" id="p1Key">Fire key <span class="kbd">A</span></div>
+    </section>
+
+    <div class="frame" id="frame">
+      <video id="video" playsinline muted hidden></video>
+      <canvas id="overlay" hidden></canvas>
+      <div class="zones" aria-hidden="true">
+        <div class="zone z1"><span class="tag" id="z1Tag">Left</span></div>
+        <div class="zone z2"><span class="tag" id="z2Tag">Right</span></div>
+      </div>
+      <div class="split" aria-hidden="true"></div>
+      <div class="corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="muzzle m1" id="m1" aria-hidden="true"></div>
+      <div class="muzzle m2" id="m2" aria-hidden="true"></div>
+      <div class="placeholder" id="placeholder">
+        <div>
+          <div class="glyphs" aria-hidden="true"><span>✊</span><span class="arrow">then</span><span>👉</span></div>
+          <p>Fist to holster. Finger gun to fire.</p>
+        </div>
+      </div>
+      <div class="keyhands" id="keyhands" hidden aria-hidden="true"><div class="p1" id="kh1">✊</div><div class="p2" id="kh2">✊</div></div>
+      <div class="hold" id="hold" aria-hidden="true"><span></span></div>
+      <div class="call-wrap" aria-live="assertive"><p class="call" id="call"></p></div>
+    </div>
+
+    <section class="gunslinger on-ink" id="p2Card" data-side="p2" aria-label="Right player">
+      <div class="who" id="p2Who">Right</div>
+      <div class="status" id="p2Status">Waiting</div>
+      <div class="time" id="p2Time"></div>
+      <div class="keyhint" id="p2Key">Fire key <span class="kbd">L</span></div>
+    </section>
+  </main>
+
+  <div class="below">
+    <p class="line" id="line" aria-live="polite">Pick a mode to start.</p>
+    <div class="row" id="actions"></div>
+  </div>
+</div>
+
+<!-- Start -->
+<div class="sheet-wrap" id="intro" role="dialog" aria-modal="true" aria-labelledby="introTitle">
+  <div class="sheet">
+    <h1 id="introTitle">Quick Draw</h1>
+    <p class="lede">A duel for your webcam. Wait for the call, then make a finger gun before anyone else.</p>
+    <ol class="steps" aria-label="How a round goes">
+      <li><span class="g" aria-hidden="true">✊</span><span><strong>Holster.</strong> Hold a fist. The duel starts when everyone is holstered.</span></li>
+      <li><span class="g" aria-hidden="true">🤚</span><span><strong>Hold still.</strong> The wait is random. Draw early and you lose the round.</span></li>
+      <li><span class="g" aria-hidden="true">👉</span><span><strong>Draw!</strong> Finger gun on the call. Fastest hand wins. First to 3.</span></li>
+    </ol>
+    <hr class="rule">
+    <div class="modes">
+      <button class="mode" id="modeDuel">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#160B06"><circle cx="8" cy="7" r="3"/><circle cx="16.5" cy="7" r="3"/><path d="M2.5 19c0-3.3 2.5-6 5.5-6s5.5 2.7 5.5 6z"/><path d="M14 13.4c.8-.3 1.6-.4 2.5-.4 3 0 5.5 2.7 5.5 6h-6.6c0-2.2-.5-4.1-1.4-5.6z"/></svg></span>
+        <strong>Duel a friend</strong><span class="d">Two players side by side, one camera. Left half against right half.</span>
+      </button>
+      <button class="mode" id="modeSolo">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#160B06"><path d="M12 1.8l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.3 8l6.1-.6z"/></svg></span>
+        <strong>Face the Sheriff</strong><span class="d">Just you against a bot who gets quicker every time you beat him.</span>
+      </button>
+    </div>
+    <p class="fine"><span class="privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>Your camera stays on your device. Nothing is recorded or uploaded.</span><br>No camera? <button class="textlink" id="keysDuel">Duel with keys</button> or <button class="textlink" id="keysSolo">face the Sheriff with keys</button>.</p>
+  </div>
+</div>
+
+<!-- Match over -->
+<div class="sheet-wrap" id="over" role="dialog" aria-modal="true" aria-labelledby="overTitle" hidden>
+  <div class="sheet result">
+    <svg class="eyebrow-star" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F2B705" stroke="#160B06" stroke-width="1.4" stroke-linejoin="round" d="M12 1.8l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.3 8l6.1-.6z"/></svg>
+    <h1 id="overTitle">Left wins</h1>
+    <div class="result-score" id="overScore">3 to 1</div>
+    <div class="facts">
+      <div><strong id="factBest">212ms</strong><span id="factBestWho">fastest draw</span></div>
+      <div><strong id="factRounds">4</strong>rounds</div>
+      <div><strong id="factEarly">0</strong>early draws</div>
+    </div>
+    <div class="row">
+      <button class="btn" id="againBtn">Rematch</button>
+      <button class="btn alt" id="shareBtn">Share result</button>
+      <button class="btn alt" id="modeBtn">Change mode</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+/* ---------- Settings ---------- */
+const FIRST_TO = 3;
+const HOLSTER_HOLD_MS = 700;          // everyone holds a fist this long to start the standoff
+const STANDOFF_MIN_MS = 1800;         // random wait before "Draw!"
+const STANDOFF_MAX_MS = 4800;
+const DRAW_TIMEOUT_MS = 2500;         // nobody fires in this time: round void
+const NEXT_ROUND_MS = 2600;           // pause after a result before re-holstering
+const SHERIFF_START_MS = 430;         // Sheriff's reaction time in round one
+const SHERIFF_FASTEST_MS = 215;
+const MP_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+
+/* ---------- Elements ---------- */
+const $ = (id) => document.getElementById(id);
+const P = {
+  p1: { status: $("p1Status"), time: $("p1Time"), who: $("p1Who"), name: $("p1Name"), pts: $("p1Pts"), key: $("p1Key"), card: $("p1Card"), pips: $("p1Pips"), tag: $("z1Tag") },
+  p2: { status: $("p2Status"), time: $("p2Time"), who: $("p2Who"), name: $("p2Name"), pts: $("p2Pts"), key: $("p2Key"), card: $("p2Card"), pips: $("p2Pips"), tag: $("z2Tag") },
+};
+const call = $("call"), line = $("line"), actions = $("actions"), frame = $("frame");
+const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
+
+/* ---------- State ---------- */
+const game = {
+  input: null,        // "camera" | "keys"
+  solo: false,
+  phase: "intro",     // intro | holster | standoff | draw | result | over
+  score: { p1: 0, p2: 0 },
+  rounds: 0, early: 0,
+  best: { p1: Infinity, p2: Infinity },
+  drawAt: 0,
+  holsterSince: 0,
+  sheriffMs: SHERIFF_START_MS,
+  timers: [],
+  sound: true,
+};
+const hands = { p1: { shape: null, count: 0 }, p2: { shape: null, count: 0 } };
+
+/* ---------- Presentation hooks (visual only, no game logic) ---------- */
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function retrigger(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+function heartbeat() { retrigger(frame, "beat"); }
+function recoil() {
+  retrigger(frame, "recoil");
+  const winner = P.p1.status.classList.contains("win") ? "p1" : P.p2.status.classList.contains("win") ? "p2" : null;
+  const ids = winner ? [winner === "p1" ? "m1" : "m2"] : ["m1", "m2"];
+  if (!(game.solo && winner === "p2")) ids.forEach((id) => retrigger($(id), "go"));
+}
+function setPts(p) {
+  P[p].pts.textContent = game.score[p];
+  [...P[p].pips.children].forEach((pip, i) => pip.classList.toggle("on", i < game.score[p]));
+}
+// Keep the page's data attributes in step with the game every frame, so CSS can stage each moment
+(function presentationLoop() {
+  const b = document.body;
+  if (b.dataset.phase !== game.phase) b.dataset.phase = game.phase;
+  const inp = game.input || "";
+  if (b.dataset.input !== inp) b.dataset.input = inp;
+  const hold = game.phase === "holster" && game.holsterSince ? Math.min(1, (performance.now() - game.holsterSince) / HOLSTER_HOLD_MS) : 0;
+  frame.style.setProperty("--hold", hold.toFixed(3));
+  requestAnimationFrame(presentationLoop);
+})();
+
+/* ---------- Sound ---------- */
+let ac;
+function audio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); return ac; } catch { return null; } }
+function tone(freq, ms, type = "sine", vol = .12) {
+  const a = game.sound && audio(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, a.currentTime); g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + ms / 1000);
+  o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime + ms / 1000);
+}
+function bangSound() {
+  const a = game.sound && audio(); if (!a) return;
+  const len = a.sampleRate * .35, buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+  const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  f.type = "lowpass"; f.frequency.value = 1800; g.gain.value = .5;
+  s.buffer = buf; s.connect(f).connect(g).connect(a.destination); s.start();
+}
+function bang() { bangSound(); requestAnimationFrame(recoil); }
+const sfx = {
+  thump: () => { heartbeat(); tone(58, 160, "sine", .35); },
+  draw: () => tone(880, 120, "square", .07),
+  bang,
+  foul: () => { tone(160, 260, "sawtooth", .06); },
+  holster: () => tone(520, 70, "triangle", .06),
+};
+
+/* ---------- Helpers ---------- */
+function later(fn, ms) { const t = setTimeout(fn, ms); game.timers.push(t); return t; }
+function clearTimers() { game.timers.forEach(clearTimeout); game.timers = []; }
+function say(text, cls = "") { call.className = "call"; void call.offsetWidth; call.textContent = text; call.className = "call " + cls; }
+function tell(html) { line.innerHTML = html; }
+function buttons(list) {
+  actions.innerHTML = "";
+  for (const b of list) {
+    const el = document.createElement("button");
+    el.className = "btn" + (b.alt ? " alt" : "");
+    el.textContent = b.label; el.addEventListener("click", b.onClick);
+    actions.appendChild(el);
+  }
+}
+function status(p, text, cls = "") {
+  P[p].status.textContent = text; P[p].status.className = "status " + cls;
+  P[p].card.dataset.state = cls;
+  frame.dataset[p === "p1" ? "s1" : "s2"] = cls;
+}
+function showTime(p, ms, note = "") { P[p].time.innerHTML = ms == null ? "" : `${Math.round(ms)}<small>ms${note}</small>`; }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200); }
+function bump(el) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+const label = (p) => (p === "p1" ? (game.solo ? "You" : "Left") : (game.solo ? "Sheriff" : "Right"));
+const other = (p) => (p === "p1" ? "p2" : "p1");
+const players = () => (game.solo ? ["p1"] : ["p1", "p2"]);
+
+/* ---------- Setup ---------- */
+function setupMode(input, solo) {
+  game.input = input; game.solo = solo;
+  $("intro").hidden = true;
+  document.body.classList.toggle("solo-mode", solo);
+  document.body.classList.toggle("touch-keys", input === "keys" && matchMedia("(pointer: coarse)").matches);
+  frame.classList.toggle("solo", solo);
+  for (const p of ["p1", "p2"]) {
+    P[p].who.textContent = label(p); P[p].name.textContent = label(p); P[p].tag.textContent = label(p);
+    P[p].card.setAttribute("aria-label", `${label(p)} player`);
+  }
+  P.p2.key.hidden = solo;
+  P.p1.key.innerHTML = solo ? 'Fire <span class="kbd">Space</span> or <span class="kbd">A</span>' : 'Fire key <span class="kbd">A</span>';
+  resetMatch();
+  if (input === "camera" && !landmarker) startCamera(); else toHolster();
+}
+
+function resetMatch() {
+  clearTimers();
+  Object.assign(game, { score: { p1: 0, p2: 0 }, rounds: 0, early: 0, best: { p1: Infinity, p2: Infinity }, sheriffMs: SHERIFF_START_MS });
+  setPts("p1"); setPts("p2");
+  $("over").hidden = true;
+}
+
+/* ---------- Round flow ---------- */
+function keyHands(p1, p2) {
+  $("kh1").textContent = p1; $("kh2").textContent = p2;
+  $("kh1").classList.toggle("fired", p1 === "👉"); $("kh2").classList.toggle("fired", p2 === "👉");
+}
+
+function toHolster() {
+  clearTimers();
+  const keys = game.input === "keys";
+  $("keyhands").hidden = !keys;
+  if (keys) { $("placeholder").hidden = true; keyHands("✊", "✊"); }
+  game.phase = "holster";
+  game.holsterSince = 0;
+  showTime("p1", null); showTime("p2", null);
+  if (game.input === "camera") {
+    say("Holster up", "pulse");
+    tell(game.solo ? "Hold a <b>fist</b> in view to start the duel." : "Both of you hold a <b>fist</b>, one each side of the line.");
+    buttons([]);
+    for (const p of players()) status(p, "Show a fist");
+    if (game.solo) status("p2", "Waiting on you");
+  } else {
+    say("Ready?", "pulse");
+    tell(game.solo
+      ? 'Press <span class="kbd">Space</span> to start. Fire with <span class="kbd">Space</span> or <span class="kbd">A</span> on <b>Draw!</b>'
+      : 'Press <span class="kbd">Space</span> to start. Left fires with <span class="kbd">A</span>, right with <span class="kbd">L</span>.');
+    if (matchMedia("(pointer: coarse)").matches) tell(game.solo ? "Tap to start, then tap anywhere on <b>Draw!</b>" : "Tap to start. On <b>Draw!</b> tap your half of the screen.");
+    buttons([{ label: "Start the duel", onClick: startStandoff }]);
+    for (const p of ["p1", "p2"]) status(p, "Ready");
+  }
+}
+
+function startStandoff() {
+  if (game.phase !== "holster") return;
+  clearTimers();
+  game.phase = "standoff";
+  buttons([]);
+  say("Steady", "pulse");
+  tell("Hands still. Wait for it.");
+  for (const p of ["p1", "p2"]) status(p, "Holstered", "ok");
+  const wait = STANDOFF_MIN_MS + Math.random() * (STANDOFF_MAX_MS - STANDOFF_MIN_MS);
+  // A heartbeat that speeds up as the call gets closer
+  let t = 0, gap = 700;
+  while (t + gap < wait - 150) { later(sfx.thump, t); t += gap; gap = Math.max(260, gap * .86); }
+  later(callDraw, wait);
+}
+
+function callDraw() {
+  game.phase = "draw";
+  say("Draw!", "draw");
+  sfx.draw();
+  document.body.classList.remove("flash"); void document.body.offsetWidth; document.body.classList.add("flash");
+  // Time starts when the call is actually on screen
+  requestAnimationFrame(() => {
+    game.drawAt = performance.now();
+    if (game.solo) {
+      const jitter = (Math.random() - .5) * 60;
+      later(() => fire("p2", game.drawAt + game.sheriffMs + jitter), game.sheriffMs + jitter);
+    }
+    later(() => { if (game.phase === "draw") voidRound(); }, DRAW_TIMEOUT_MS);
+  });
+}
+
+function fire(p, at = performance.now()) {
+  if (game.phase === "standoff") return foul(p);
+  if (game.phase !== "draw" || !game.drawAt) return;
+  const ms = at - game.drawAt;
+  clearTimers();
+  game.phase = "result";
+  game.rounds++;
+  game.score[p]++;
+  setPts(p); bump(P[p].pts);
+  game.best[p] = Math.min(game.best[p], ms);
+  keyHands(p === "p1" ? "👉" : "✊", p === "p2" ? "👉" : "✊");
+  showTime(p, ms);
+  status(p, "Fastest", "win");
+  status(other(p), "Too slow", "bad");
+  bang();
+  say(p === "p1" && game.solo ? "Got him" : `${label(p)} wins`, "slam");
+  if (game.solo) {
+    if (p === "p1") {
+      tell(`You drew in <b>${Math.round(ms)}ms</b>. The Sheriff was going for ${Math.round(game.sheriffMs)}ms. He's getting quicker.`);
+      game.sheriffMs = Math.max(SHERIFF_FASTEST_MS, game.sheriffMs - 45);
+    } else {
+      tell(`The Sheriff drew in <b>${Math.round(ms)}ms</b>. Beat that next round.`);
+    }
+  } else {
+    tell(`${label(p)} drew in <b>${Math.round(ms)}ms</b>.`);
+  }
+  afterRound();
+}
+
+function foul(p) {
+  if (game.solo && p === "p2") return;
+  clearTimers();
+  game.phase = "result";
+  game.rounds++; game.early++;
+  sfx.foul();
+  const o = other(p);
+  game.score[o]++;
+  setPts(o); bump(P[o].pts);
+  status(p, "Drew early", "bad");
+  keyHands(p === "p1" ? "👉" : "✊", p === "p2" ? "👉" : "✊");
+  status(o, "Wins by default", "win");
+  say("Too early", "slam");
+  tell(`${label(p)} drew before the call. Point to ${label(o).toLowerCase() === "you" ? "you" : label(o)}.`);
+  afterRound();
+}
+
+function deadHeat() {
+  clearTimers();
+  game.phase = "result";
+  for (const p of ["p1", "p2"]) status(p, "Dead heat", "ok");
+  bang();
+  say("Dead heat", "slam");
+  tell("You both drew on the same frame. Go again.");
+  afterRound(true);
+}
+
+function voidRound() {
+  clearTimers();
+  game.phase = "result";
+  say("Nobody fired", "slam");
+  tell("No finger guns seen. Make sure your hands are in view.");
+  for (const p of ["p1", "p2"]) status(p, "No shot");
+  afterRound(true);
+}
+
+function afterRound(noPoint = false) {
+  if (!noPoint && (game.score.p1 >= FIRST_TO || game.score.p2 >= FIRST_TO)) {
+    game.phase = "over";
+    later(showOver, 1500);
+    return;
+  }
+  if (game.input === "keys") {
+    buttons([{ label: "Next round", onClick: nextKeysRound }]);
+  } else {
+    later(toHolster, NEXT_ROUND_MS);
+  }
+}
+
+function nextKeysRound() { toHolster(); startStandoff(); }
+
+function showOver() {
+  const w = game.score.p1 >= FIRST_TO ? "p1" : "p2";
+  $("overTitle").textContent = game.solo ? (w === "p1" ? "You beat the Sheriff" : "The Sheriff wins") : `${label(w)} wins the duel`;
+  $("overScore").textContent = `${game.score.p1} to ${game.score.p2}`;
+  const bestP = game.best.p1 <= game.best.p2 ? "p1" : "p2";
+  const best = game.best[bestP];
+  $("factBest").textContent = isFinite(best) ? `${Math.round(best)}ms` : "None";
+  $("factBestWho").textContent = isFinite(best) ? `fastest draw (${label(bestP).toLowerCase() === "you" ? "you" : label(bestP)})` : "fastest draw";
+  $("factRounds").textContent = game.rounds;
+  $("factEarly").textContent = game.early;
+  $("over").hidden = false;
+  $("againBtn").focus();
+}
+
+async function share() {
+  const myBest = game.best.p1;
+  const bestAll = Math.min(game.best.p1, game.best.p2);
+  let text;
+  if (game.solo) {
+    text = game.score.p1 >= FIRST_TO
+      ? `I beat the Sheriff ${game.score.p1} to ${game.score.p2} at Quick Draw${isFinite(myBest) ? `, fastest draw ${Math.round(myBest)}ms` : ""}. It's a webcam duel: fist to holster, finger gun to fire. Think you're quicker?`
+      : `The Sheriff beat me ${game.score.p2} to ${game.score.p1} at Quick Draw. It's a webcam duel: fist to holster, finger gun to fire. Your turn.`;
+  } else {
+    text = `We settled it with a webcam duel. ${game.score.p1} to ${game.score.p2}${isFinite(bestAll) ? `, fastest draw ${Math.round(bestAll)}ms` : ""}. Fist to holster, finger gun to fire.`;
+  }
+  const url = location.href.startsWith("http") ? location.href.split("#")[0] : "";
+  try {
+    if (navigator.share) { await navigator.share({ title: "Quick Draw", text, url }); return; }
+    await navigator.clipboard.writeText(url ? `${text} ${url}` : text);
+    toast("Result copied. Paste it into your post.");
+  } catch { /* cancelled */ }
+}
+
+/* ---------- Camera ---------- */
+let landmarker = null, lastVideoTime = -1;
+
+async function startCamera() {
+  say("One sec", "pulse");
+  tell("Starting your camera and loading the hand tracker.");
+  buttons([]);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 720 } }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    const vision = await import(`${MP_BASE}/vision_bundle.mjs`);
+    const files = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+    const opts = (delegate) => ({
+      baseOptions: { modelAssetPath: MODEL_URL, delegate }, runningMode: "VIDEO", numHands: 2,
+      minHandDetectionConfidence: .5, minHandPresenceConfidence: .5, minTrackingConfidence: .5,
+    });
+    try { landmarker = await vision.HandLandmarker.createFromOptions(files, opts("GPU")); }
+    catch { landmarker = await vision.HandLandmarker.createFromOptions(files, opts("CPU")); }
+    video.hidden = false; overlay.hidden = false; $("placeholder").hidden = true;
+    toHolster();
+    requestAnimationFrame(loop);
+  } catch (err) {
+    console.error(err);
+    const blocked = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+    game.input = "keys";
+    toHolster();
+    say("No camera", "slam");
+    tell(blocked
+      ? "Camera access is blocked. Allow it from the icon in your address bar and reload, or play on with the keys. If you opened this inside another app's preview, open it in Chrome or Safari instead."
+      : "The camera or hand tracker didn't start. You can play on with the keys.");
+    buttons([{ label: "Play with keys", onClick: toHolster }, { label: "Try camera again", alt: true, onClick: () => location.reload() }]);
+  }
+}
+
+// Read a hand shape from the 21 points: fist, gun (index out, others curled), or other
+function shapeOf(lm) {
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const w = lm[0];
+  const out = (tip, pip) => d(lm[tip], w) > d(lm[pip], w) * 1.12;
+  const i = out(8, 6), m = out(12, 10), r = out(16, 14), p = out(20, 18);
+  if (!i && !m && !r && !p) return "fist";
+  if (i && !m && !r && !p) return "gun";
+  return "other";
+}
+
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const SHAPE_STYLE = {
+  fist:  { color: "#43D19E", label: "Holstered" },
+  gun:   { color: "#F2B705", label: "Drawn" },
+  other: { color: "rgba(246,231,203,.85)", label: "" },
+};
+function drawHands(list) {
+  const dpr = devicePixelRatio;
+  const W = overlay.width = overlay.clientWidth * dpr;
+  const H = overlay.height = overlay.clientHeight * dpr;
+  ctx.clearRect(0, 0, W, H);
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const s = Math.max(W / vw, H / vh), ox = (W - vw * s) / 2, oy = (H - vh * s) / 2;
+  const pt = (q) => [ox + q.x * vw * s, oy + q.y * vh * s];
+  for (const { lm, shape } of list) {
+    const st = SHAPE_STYLE[shape];
+    // Bones with a soft glow
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.shadowColor = st.color; ctx.shadowBlur = 12 * dpr;
+    ctx.strokeStyle = st.color; ctx.lineWidth = 5 * dpr;
+    ctx.beginPath();
+    for (const [a, b] of BONES) { const [x1, y1] = pt(lm[a]), [x2, y2] = pt(lm[b]); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
+    ctx.stroke();
+    ctx.restore();
+    // Joints
+    ctx.fillStyle = "#160B06"; ctx.strokeStyle = st.color; ctx.lineWidth = 2 * dpr;
+    for (const q of lm) { const [x, y] = pt(q); ctx.beginPath(); ctx.arc(x, y, 4.5 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    // Barrel tip: a bright ring on the index fingertip when drawn
+    if (shape === "gun") {
+      const [tx, ty] = pt(lm[8]);
+      ctx.beginPath(); ctx.arc(tx, ty, 11 * dpr, 0, Math.PI * 2); ctx.lineWidth = 3 * dpr; ctx.strokeStyle = "#F2B705"; ctx.stroke();
+    }
+    // Shape label under the wrist; the canvas is mirrored, so flip the text back
+    if (st.label) {
+      const [wx, wy] = pt(lm[0]);
+      ctx.save();
+      ctx.translate(wx, wy + 28 * dpr);
+      ctx.scale(-1, 1);
+      ctx.font = `700 ${15 * dpr}px "Barlow Condensed", system-ui, sans-serif`;
+      const tw = ctx.measureText(st.label).width, pad = 9 * dpr, h = 24 * dpr;
+      ctx.fillStyle = "rgba(22,11,6,.85)";
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-tw / 2 - pad, -h / 2, tw + pad * 2, h, h / 2); else ctx.rect(-tw / 2 - pad, -h / 2, tw + pad * 2, h); ctx.fill();
+      ctx.fillStyle = st.color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(st.label, 0, 1 * dpr);
+      ctx.restore();
+    }
+  }
+}
+
+function loop() {
+  if (game.input === "camera" && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const now = performance.now();
+    const res = landmarker.detectForVideo(video, now);
+    const found = { p1: null, p2: null };
+    const drawn = [];
+    for (const lm of res.landmarks || []) {
+      const shape = shapeOf(lm);
+      // The view is mirrored, so a hand on the left of the screen has a high x in the camera image
+      const screenX = 1 - lm[0].x;
+      const p = game.solo ? "p1" : (screenX < .5 ? "p1" : "p2");
+      // If two hands land on one side, a gun beats a fist (that player is drawing)
+      if (!found[p] || shape === "gun") found[p] = shape;
+      drawn.push({ lm, shape });
+    }
+    drawHands(drawn);
+    for (const p of ["p1", "p2"]) {
+      const h = hands[p], sh = found[p];
+      if (sh && sh === h.shape) h.count++; else { h.shape = sh; h.count = sh ? 1 : 0; }
+    }
+    const steady = (p, need = 2) => hands[p].count >= need ? hands[p].shape : null;
+
+    if (game.phase === "holster") {
+      let all = true;
+      for (const p of players()) {
+        const s = steady(p, 3);
+        if (s === "fist") status(p, "Holstered", "ok");
+        else { status(p, hands[p].shape ? "Make a fist" : "Show a fist"); all = false; }
+      }
+      if (all) {
+        if (!game.holsterSince) { game.holsterSince = now; sfx.holster(); }
+        if (now - game.holsterSince >= HOLSTER_HOLD_MS) startStandoff();
+      } else game.holsterSince = 0;
+    } else if (game.phase === "standoff") {
+      for (const p of players()) if (steady(p) === "gun") { foul(p); break; }
+    } else if (game.phase === "draw" && game.drawAt) {
+      // Fire on the first frame a gun is seen; the timestamp is this frame
+      const shooters = players().filter((p) => hands[p].shape === "gun");
+      if (shooters.length === 2) deadHeat();
+      else if (shooters.length === 1) fire(shooters[0], now);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- Input ---------- */
+$("modeDuel").addEventListener("click", () => setupMode("camera", false));
+$("modeSolo").addEventListener("click", () => setupMode("camera", true));
+$("keysDuel").addEventListener("click", () => setupMode("keys", false));
+$("keysSolo").addEventListener("click", () => setupMode("keys", true));
+$("rulesBtn").addEventListener("click", () => { clearTimers(); game.phase = "intro"; $("intro").hidden = false; $("modeDuel").focus(); });
+$("againBtn").addEventListener("click", () => { resetMatch(); toHolster(); });
+$("modeBtn").addEventListener("click", () => { $("over").hidden = true; game.phase = "intro"; $("intro").hidden = false; $("modeDuel").focus(); });
+$("shareBtn").addEventListener("click", share);
+$("soundBtn").addEventListener("click", toggleSound);
+function toggleSound() { game.sound = !game.sound; $("soundState").textContent = game.sound ? "on" : "off"; $("soundBtn").setAttribute("aria-pressed", String(game.sound)); }
+
+document.querySelectorAll(".tapzones button").forEach((b) => b.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (game.phase === "holster") { startStandoff(); return; }
+  if (game.phase === "result" && game.input === "keys") { nextKeysRound(); return; }
+  fire(game.solo ? "p1" : b.dataset.fire);
+}));
+
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (!$("intro").hidden || !$("over").hidden) return;
+  const k = e.key.toLowerCase();
+  if (k === "m") { toggleSound(); return; }
+  if (k === "a") { fire("p1"); return; }
+  if (k === "l" && !game.solo) { fire("p2"); return; }
+  if (k === " " || k === "enter") {
+    if (document.activeElement && document.activeElement.tagName === "BUTTON" && k === "enter") return;
+    e.preventDefault();
+    if (game.phase === "holster" && game.input === "keys") startStandoff();
+    else if (game.phase === "result" && game.input === "keys") nextKeysRound();
+    else if (game.solo && k === " ") fire("p1");
+  }
+});
+</script>
+</body>
+</html>
