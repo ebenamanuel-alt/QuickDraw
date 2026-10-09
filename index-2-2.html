@@ -13,39 +13,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rye&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  /* ================================================================
-     Design tokens
-     Environment = sunset. Information always sits on ink plaques,
-     so scores, states and times stay legible at a glance.
-     ================================================================ */
   :root {
-    /* Sky */
     --sky-1: #FF9A4A;
     --sky-2: #FF6A2A;
     --sky-3: #E8501C;
     --sun-core: #FFD27A;
     --sun-edge: #FFA03A;
-    /* Ink and paper */
     --ink: #160B06;
     --ink-2: #24130A;
     --ink-3: #3A2214;
     --bone: #F6E7CB;
     --bone-dim: #CDB896;
-    /* State colours: one meaning each, everywhere */
-    --gold: #F2B705;   /* armed, holstered, the call */
-    --jade: #43D19E;   /* winner, fastest */
-    --coral: #FF7A66;  /* foul, too slow */
-    --rust-text: #8E2408;
+    --gold: #F2B705;    --jade: #43D19E;    --coral: #FF7A66;    --rust-text: #8E2408;
 
-    /* Type */
     --display: "Rye", Georgia, serif;
     --body: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
     --t-12: 14px; --t-14: 16px; --t-16: 18px; --t-18: 20px; --t-22: 24px; --t-28: 30px; --t-40: 44px;
 
-    /* Space (4px base) */
     --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px;
 
-    /* Shape */
     --r-s: 10px; --r-m: 16px; --r-l: 24px; --r-pill: 999px;
     --lift: 0 6px 0 rgba(22, 11, 6, .35);
     --ease-snap: cubic-bezier(.2, 1.5, .35, 1);
@@ -70,9 +56,6 @@
   .on-ink :focus-visible, .sheet .mode:focus-visible { outline-color: var(--gold); }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-  /* ================================================================
-     Scene: sun, horizon, and the cinematic layers
-     ================================================================ */
   .sun {
     position: fixed; left: 50%; top: 56%; width: 80vmin; height: 80vmin; transform: translate(-50%, -50%);
     border-radius: 50%; z-index: 0; pointer-events: none;
@@ -82,7 +65,6 @@
   .horizon { position: fixed; left: 0; right: 0; bottom: 0; height: 8vh; background: var(--ink); z-index: 0; pointer-events: none; }
   .horizon svg { position: absolute; bottom: 100%; left: 0; width: 100%; height: 8vh; }
 
-  /* Vignette and letterbox close in during the standoff */
   .vignette {
     position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
     background: radial-gradient(ellipse at 50% 50%, rgba(22, 11, 6, 0) 35%, rgba(22, 11, 6, .62) 100%);
@@ -96,13 +78,9 @@
   body[data-phase="standoff"] .sun { transform: translate(-50%, -46%) scale(.94); }
   body[data-phase="draw"] .bar, body[data-phase="result"] .bar { transition: height .12s ease-out; }
 
-  /* The flash on Draw! */
   body.flash::after { content: ""; position: fixed; inset: 0; background: var(--bone); z-index: 50; animation: flash .32s ease-out forwards; pointer-events: none; }
   @keyframes flash { from { opacity: .85; } to { opacity: 0; } }
 
-  /* ================================================================
-     App shell
-     ================================================================ */
   .app {
     position: relative; max-width: 1240px; margin: 0 auto;
     padding: var(--s-4) var(--s-5) var(--s-6);
@@ -124,7 +102,6 @@
   #soundBtn[aria-pressed="false"] .wave { display: none; }
   #soundBtn[aria-pressed="true"] .mute { display: none; }
 
-  /* Scoreboard plank */
   .tally {
     display: grid; grid-template-columns: auto auto auto auto auto; align-items: center; gap: var(--s-3);
     background: var(--ink); color: var(--bone); border-radius: var(--r-m); padding: 8px 16px;
@@ -145,9 +122,6 @@
   .bump { animation: bump .5s var(--ease-snap); }
   @keyframes bump { 40% { transform: scale(1.6); } }
 
-  /* ================================================================
-     The duel: player plaques either side of the camera
-     ================================================================ */
   .duel {
     position: relative; z-index: 1; flex: 1;
     display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 700px) minmax(150px, 1fr);
@@ -195,9 +169,6 @@
   }
   .gunslinger .kbd { box-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
 
-  /* ================================================================
-     Camera frame
-     ================================================================ */
   .frame {
     position: relative; aspect-ratio: 4 / 3; justify-self: center;
     width: min(100%, calc((100vh - 360px) * 4 / 3)); min-width: min(100%, 360px);
@@ -211,7 +182,6 @@
   body[data-phase="standoff"] .frame video { filter: sepia(.5) saturate(.6) contrast(1.15) brightness(.8); transition: filter 1.4s; }
   .frame canvas { z-index: 2; }
 
-  /* Player zones: tint each half by that player's state */
   .zones { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; z-index: 1; pointer-events: none; }
   .frame.solo .zones { grid-template-columns: 1fr; }
   .frame.solo .z2 { display: none; }
@@ -229,7 +199,6 @@
   .split { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; border-left: 3px dashed rgba(246, 231, 203, .5); z-index: 3; transform: translateX(-1.5px); }
   .frame.solo .split { display: none; }
 
-  /* Viewfinder corners */
   .corners { position: absolute; inset: var(--s-3); z-index: 3; pointer-events: none; }
   .corners i { position: absolute; width: 22px; height: 22px; border: 3px solid rgba(246, 231, 203, .7); }
   .corners i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
@@ -238,13 +207,11 @@
   .corners i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
   body[data-phase="standoff"] .corners i { border-color: var(--gold); }
 
-  /* Before the camera starts */
   .placeholder { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--bone); padding: var(--s-5); z-index: 1; }
   .placeholder .glyphs { display: flex; gap: var(--s-5); justify-content: center; align-items: center; font-size: 60px; line-height: 1; }
   .placeholder .glyphs span.arrow { font-size: var(--t-28); color: var(--bone-dim); }
   .placeholder p { margin: var(--s-3) 0 0; font-size: var(--t-18); color: var(--bone-dim); }
 
-  /* Keyboard mode stand ins */
   .keyhands { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; align-items: end; padding-bottom: 7%; z-index: 1; }
   .frame.solo .keyhands { grid-template-columns: 1fr; }
   .keyhands div { text-align: center; font-size: clamp(56px, 9vw, 100px); line-height: 1; transition: transform .14s var(--ease-snap); }
@@ -253,12 +220,10 @@
   .keyhands .p2.fired { transform: scaleX(-1) translateY(-14px) rotate(-8deg) scale(1.08); }
   .frame.solo .keyhands .p2 { display: none; }
 
-  /* Holster progress, camera mode */
   .hold { position: absolute; left: 50%; bottom: 14%; width: 38%; height: 8px; transform: translateX(-50%); border-radius: var(--r-pill); background: rgba(246, 231, 203, .25); overflow: hidden; z-index: 4; opacity: 0; transition: opacity .2s; }
   .hold span { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--hold, 0)); background: var(--gold); border-radius: inherit; }
   body[data-phase="holster"][data-input="camera"] .hold { opacity: 1; }
 
-  /* The call */
   .call-wrap { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; pointer-events: none; text-align: center; padding: var(--s-4); }
   .call {
     font-family: var(--display); color: var(--bone); margin: 0; line-height: .92;
@@ -277,7 +242,6 @@
   @keyframes slam { from { transform: scale(2.3) rotate(-6deg); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   @keyframes breathe { 50% { transform: scale(1.05); opacity: .9; } }
 
-  /* Heartbeat: the frame throbs on each thump */
   .frame.beat { animation: beat .32s ease-out; }
   @keyframes beat {
     0% { box-shadow: 0 16px 0 rgba(22, 11, 6, .28), 0 0 0 0 rgba(242, 183, 5, .55); }
@@ -285,7 +249,6 @@
   }
   body[data-phase="draw"] .frame { border-color: var(--gold); }
 
-  /* Recoil and muzzle flash on the shot */
   .frame.recoil { animation: recoil .34s cubic-bezier(.3, .7, .4, 1); }
   @keyframes recoil {
     0% { transform: translate(0, 0); } 15% { transform: translate(-7px, 3px) rotate(-.6deg); }
@@ -299,9 +262,6 @@
   .muzzle.go { animation: muzzle .38s ease-out; }
   @keyframes muzzle { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.4); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); } }
 
-  /* ================================================================
-     Caption and actions under the frame
-     ================================================================ */
   .below { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--s-3); padding-bottom: 10vh; }
   .line {
     margin: 0; max-width: 62ch; text-align: center;
@@ -325,16 +285,12 @@
   .btn.alt:hover { background: rgba(22, 11, 6, .08); }
   .btn.alt:active { transform: translateY(2px); }
 
-  /* Touch tap zones for keys mode on phones */
   .tapzones { position: fixed; inset: 0; z-index: 2; display: none; }
   .tapzones button { flex: 1; background: transparent; border: 0; }
   .tapzones button:active { background: rgba(246, 231, 203, .08); }
   body.touch-keys .tapzones { display: flex; }
   body.touch-keys.solo-mode .tapzones button:last-child { display: none; }
 
-  /* ================================================================
-     Sheets: start and match over
-     ================================================================ */
   .sheet-wrap { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--s-4); background: rgba(22, 11, 6, .72); backdrop-filter: blur(3px); }
   .sheet {
     position: relative; background: var(--bone); border-radius: var(--r-l); border: 4px solid var(--ink);
@@ -374,7 +330,6 @@
   .privacy { display: inline-flex; align-items: center; gap: 6px; }
   .privacy svg { width: 16px; height: 16px; flex: none; }
 
-  /* Result */
   .result .eyebrow-star { width: 54px; height: 54px; margin-bottom: var(--s-3); }
   .result-score { font-family: var(--body); font-weight: 800; font-size: 76px; line-height: 1; margin: 0 0 var(--s-5); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
   .facts { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: var(--s-3); margin-bottom: var(--s-5); }
@@ -390,18 +345,12 @@
   .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 8px); z-index: 30; background: var(--ink); color: var(--bone); padding: 12px 18px; border-radius: var(--r-pill); font-weight: 700; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-  /* ================================================================
-     Tablet
-     ================================================================ */
   @media (max-width: 1100px) and (min-width: 861px) {
     .duel { grid-template-columns: minmax(140px, 1fr) minmax(0, 600px) minmax(140px, 1fr); gap: var(--s-4); }
     .time { font-size: 44px; min-height: 44px; }
     .gunslinger .who { font-size: var(--t-22); }
   }
 
-  /* ================================================================
-     Mobile: frame on top, two plaques side by side underneath
-     ================================================================ */
   @media (max-width: 860px) {
     body { font-size: var(--t-16); }
     .app { padding: var(--s-3) var(--s-3) var(--s-5); gap: var(--s-3); }
@@ -437,9 +386,6 @@
     .tally .name { display: none; }
   }
 
-  /* ================================================================
-     Reduced motion: keep every state, drop the movement
-     ================================================================ */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
     body.flash::after, .muzzle { display: none; }
@@ -527,7 +473,6 @@
   </div>
 </div>
 
-<!-- Start -->
 <div class="sheet-wrap" id="intro" role="dialog" aria-modal="true" aria-labelledby="introTitle">
   <div class="sheet">
     <h1 id="introTitle">Quick Draw</h1>
@@ -552,7 +497,6 @@
   </div>
 </div>
 
-<!-- Match over -->
 <div class="sheet-wrap" id="over" role="dialog" aria-modal="true" aria-labelledby="overTitle" hidden>
   <div class="sheet result">
     <svg class="eyebrow-star" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F2B705" stroke="#160B06" stroke-width="1.4" stroke-linejoin="round" d="M12 1.8l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.3 8l6.1-.6z"/></svg>
@@ -574,19 +518,17 @@
 <div class="toast" id="toast" role="status"></div>
 
 <script type="module">
-/* ---------- Settings ---------- */
 const FIRST_TO = 3;
-const HOLSTER_HOLD_MS = 700;          // everyone holds a fist this long to start the standoff
-const STANDOFF_MIN_MS = 1800;         // random wait before "Draw!"
+const HOLSTER_HOLD_MS = 700;
+const STANDOFF_MIN_MS = 1800;
 const STANDOFF_MAX_MS = 4800;
-const DRAW_TIMEOUT_MS = 2500;         // nobody fires in this time: round void
-const NEXT_ROUND_MS = 2600;           // pause after a result before re-holstering
-const SHERIFF_START_MS = 430;         // Sheriff's reaction time in round one
+const DRAW_TIMEOUT_MS = 2500;
+const NEXT_ROUND_MS = 2600;
+const SHERIFF_START_MS = 430;
 const SHERIFF_FASTEST_MS = 215;
 const MP_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 
-/* ---------- Elements ---------- */
 const $ = (id) => document.getElementById(id);
 const P = {
   p1: { status: $("p1Status"), time: $("p1Time"), who: $("p1Who"), name: $("p1Name"), pts: $("p1Pts"), key: $("p1Key"), card: $("p1Card"), pips: $("p1Pips"), tag: $("z1Tag") },
@@ -595,11 +537,10 @@ const P = {
 const call = $("call"), line = $("line"), actions = $("actions"), frame = $("frame");
 const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
 
-/* ---------- State ---------- */
 const game = {
-  input: null,        // "camera" | "keys"
+  input: null,
   solo: false,
-  phase: "intro",     // intro | holster | standoff | draw | result | over
+  phase: "intro",
   score: { p1: 0, p2: 0 },
   rounds: 0, early: 0,
   best: { p1: Infinity, p2: Infinity },
@@ -611,7 +552,6 @@ const game = {
 };
 const hands = { p1: { shape: null, count: 0 }, p2: { shape: null, count: 0 } };
 
-/* ---------- Presentation hooks (visual only, no game logic) ---------- */
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function retrigger(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
 function heartbeat() { retrigger(frame, "beat"); }
@@ -625,7 +565,6 @@ function setPts(p) {
   P[p].pts.textContent = game.score[p];
   [...P[p].pips.children].forEach((pip, i) => pip.classList.toggle("on", i < game.score[p]));
 }
-// Keep the page's data attributes in step with the game every frame, so CSS can stage each moment
 (function presentationLoop() {
   const b = document.body;
   if (b.dataset.phase !== game.phase) b.dataset.phase = game.phase;
@@ -636,7 +575,6 @@ function setPts(p) {
   requestAnimationFrame(presentationLoop);
 })();
 
-/* ---------- Sound ---------- */
 let ac;
 function audio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); return ac; } catch { return null; } }
 function tone(freq, ms, type = "sine", vol = .12) {
@@ -663,7 +601,6 @@ const sfx = {
   holster: () => tone(520, 70, "triangle", .06),
 };
 
-/* ---------- Helpers ---------- */
 function later(fn, ms) { const t = setTimeout(fn, ms); game.timers.push(t); return t; }
 function clearTimers() { game.timers.forEach(clearTimeout); game.timers = []; }
 function say(text, cls = "") { call.className = "call"; void call.offsetWidth; call.textContent = text; call.className = "call " + cls; }
@@ -689,7 +626,6 @@ const label = (p) => (p === "p1" ? (game.solo ? "You" : "Left") : (game.solo ? "
 const other = (p) => (p === "p1" ? "p2" : "p1");
 const players = () => (game.solo ? ["p1"] : ["p1", "p2"]);
 
-/* ---------- Setup ---------- */
 function setupMode(input, solo) {
   game.input = input; game.solo = solo;
   $("intro").hidden = true;
@@ -713,7 +649,6 @@ function resetMatch() {
   $("over").hidden = true;
 }
 
-/* ---------- Round flow ---------- */
 function keyHands(p1, p2) {
   $("kh1").textContent = p1; $("kh2").textContent = p2;
   $("kh1").classList.toggle("fired", p1 === "👉"); $("kh2").classList.toggle("fired", p2 === "👉");
@@ -753,7 +688,6 @@ function startStandoff() {
   tell("Hands still. Wait for it.");
   for (const p of ["p1", "p2"]) status(p, "Holstered", "ok");
   const wait = STANDOFF_MIN_MS + Math.random() * (STANDOFF_MAX_MS - STANDOFF_MIN_MS);
-  // A heartbeat that speeds up as the call gets closer
   let t = 0, gap = 700;
   while (t + gap < wait - 150) { later(sfx.thump, t); t += gap; gap = Math.max(260, gap * .86); }
   later(callDraw, wait);
@@ -764,7 +698,6 @@ function callDraw() {
   say("Draw!", "draw");
   sfx.draw();
   document.body.classList.remove("flash"); void document.body.offsetWidth; document.body.classList.add("flash");
-  // Time starts when the call is actually on screen
   requestAnimationFrame(() => {
     game.drawAt = performance.now();
     if (game.solo) {
@@ -885,10 +818,9 @@ async function share() {
     if (navigator.share) { await navigator.share({ title: "Quick Draw", text, url }); return; }
     await navigator.clipboard.writeText(url ? `${text} ${url}` : text);
     toast("Result copied. Paste it into your post.");
-  } catch { /* cancelled */ }
+  } catch { }
 }
 
-/* ---------- Camera ---------- */
 let landmarker = null, lastVideoTime = -1;
 
 async function startCamera() {
@@ -923,7 +855,6 @@ async function startCamera() {
   }
 }
 
-// Read a hand shape from the 21 points: fist, gun (index out, others curled), or other
 function shapeOf(lm) {
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const w = lm[0];
@@ -950,7 +881,6 @@ function drawHands(list) {
   const pt = (q) => [ox + q.x * vw * s, oy + q.y * vh * s];
   for (const { lm, shape } of list) {
     const st = SHAPE_STYLE[shape];
-    // Bones with a soft glow
     ctx.save();
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.shadowColor = st.color; ctx.shadowBlur = 12 * dpr;
@@ -959,15 +889,12 @@ function drawHands(list) {
     for (const [a, b] of BONES) { const [x1, y1] = pt(lm[a]), [x2, y2] = pt(lm[b]); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
     ctx.stroke();
     ctx.restore();
-    // Joints
     ctx.fillStyle = "#160B06"; ctx.strokeStyle = st.color; ctx.lineWidth = 2 * dpr;
     for (const q of lm) { const [x, y] = pt(q); ctx.beginPath(); ctx.arc(x, y, 4.5 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-    // Barrel tip: a bright ring on the index fingertip when drawn
     if (shape === "gun") {
       const [tx, ty] = pt(lm[8]);
       ctx.beginPath(); ctx.arc(tx, ty, 11 * dpr, 0, Math.PI * 2); ctx.lineWidth = 3 * dpr; ctx.strokeStyle = "#F2B705"; ctx.stroke();
     }
-    // Shape label under the wrist; the canvas is mirrored, so flip the text back
     if (st.label) {
       const [wx, wy] = pt(lm[0]);
       ctx.save();
@@ -993,10 +920,8 @@ function loop() {
     const drawn = [];
     for (const lm of res.landmarks || []) {
       const shape = shapeOf(lm);
-      // The view is mirrored, so a hand on the left of the screen has a high x in the camera image
       const screenX = 1 - lm[0].x;
       const p = game.solo ? "p1" : (screenX < .5 ? "p1" : "p2");
-      // If two hands land on one side, a gun beats a fist (that player is drawing)
       if (!found[p] || shape === "gun") found[p] = shape;
       drawn.push({ lm, shape });
     }
@@ -1021,7 +946,6 @@ function loop() {
     } else if (game.phase === "standoff") {
       for (const p of players()) if (steady(p) === "gun") { foul(p); break; }
     } else if (game.phase === "draw" && game.drawAt) {
-      // Fire on the first frame a gun is seen; the timestamp is this frame
       const shooters = players().filter((p) => hands[p].shape === "gun");
       if (shooters.length === 2) deadHeat();
       else if (shooters.length === 1) fire(shooters[0], now);
@@ -1030,7 +954,6 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-/* ---------- Input ---------- */
 $("modeDuel").addEventListener("click", () => setupMode("camera", false));
 $("modeSolo").addEventListener("click", () => setupMode("camera", true));
 $("keysDuel").addEventListener("click", () => setupMode("keys", false));
